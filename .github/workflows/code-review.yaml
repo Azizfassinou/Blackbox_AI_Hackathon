@@ -1,0 +1,62 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      - name: Install requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Call Blackbox AI Agent
+        id: ai_review
+        run: |
+          import requests
+          import os
+          import json
+
+          # Read the code from the pull request
+          with open('path/to/your/code/file.py', 'r') as file:
+              code = file.read()
+
+          # Prepare the payload for the AI agent
+          payload = {
+              "code": code,
+              "review_type": "full",  # or "code", "security", "documentation"
+              "additional_agents": ["code_reviewer", "security_audit", "documentation_writer"]
+          }
+
+          # Call the AI agent API
+          response = requests.post(
+              os.getenv('AI_AGENT_API_URL'),
+              headers={"Authorization": f"Bearer {os.getenv('AI_AGENT_API_TOKEN')}", "Content-Type": "application/json"},
+              data=json.dumps(payload)
+          )
+
+          # Check for a successful response
+          if response.status_code == 200:
+              feedback = response.json()
+              print(feedback)
+              print("::set-output name=feedback::" + json.dumps(feedback))
+          else:
+              raise Exception(f"AI Agent API call failed: {response.status_code} {response.text}")
+
+      - name: Post feedback to Pull Request
+        uses: peter-evans/comment-pr@v1
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.ai_review.outputs.feedback }}
