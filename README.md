@@ -1,218 +1,294 @@
-# 🤖 Blackbox PR Review Bot
+# Blackbox AI PR Review Bot
 
-An intelligent Pull Request review bot powered by Blackbox AI that automatically analyzes code changes, detects bugs, identifies security vulnerabilities, and provides actionable feedback.
+An intelligent GitHub Actions bot that provides comprehensive code reviews using Blackbox AI and specialized analyzers. The bot now includes enhanced diff analysis and provides detailed summaries of code changes.
 
-## ✨ Features
+## ✨ New Features
 
-- **🔍 Automated PR Analysis** - Analyzes all code changes in pull requests
-- **🐛 Bug Detection** - Identifies common bugs, logic errors, and code smells
-- **🔒 Security Scanning** - Detects SQL injection, XSS, hardcoded secrets, and more
-- **📚 Documentation Linking** - Suggests relevant documentation for APIs and patterns
-- **📝 PR Summarization** - Generates comprehensive summaries of changes
-- **💬 Inline Comments** - Posts contextual comments directly on problematic lines
-- **⚡ Multi-Language Support** - Works with Python, JavaScript, TypeScript, Java, Go, and more
-- **🚀 Scalable** - Handles multiple repositories with configurable rules
+### Enhanced Code Review with Diff Analysis
+- **Diff-aware analysis**: Focuses review on changed code sections
+- **Visual diff display**: Shows code changes in comments  
+- **Complexity assessment**: Evaluates change complexity (low/medium/high)
+- **Change-focused feedback**: Prioritizes issues in modified areas
+
+### Improved Summary Comments
+- **Code quality grading**: A-F grade for overall code quality
+- **Change overview**: Lines added/removed and complexity metrics
+- **Priority issues**: Highlights problems in changed code with 🔄 marker
+- **Recommendations**: Actionable suggestions based on findings
 
 ## 🚀 Quick Start
 
-### 1. Setup in Your Repository
+### 1. Repository Setup
 
-1. **Copy the workflow file** to your repository:
-   ```bash
-   mkdir -p .github/workflows
-   cp .github/workflows/pr-review.yml .github/workflows/
-   ```
+Add these files to your repository:
 
-2. **Add Blackbox API Key** as a repository secret:
-   - Go to your repository → Settings → Secrets and variables → Actions
-   - Click "New repository secret"
-   - Name: `BLACKBOX_API_KEY`
-   - Value: Your Blackbox API key
+```bash
+mkdir -p .github/workflows
+# Copy the workflow file (already provided)
+```
 
-3. **Add GitHub Token** (automatically available as `GITHUB_TOKEN`)
+### 2. Required Secrets
 
-### 2. Configuration (Optional)
+Configure these secrets in your GitHub repository:
 
-Create a `.pr-review-bot.json` file in your repository root to customize behavior:
+```bash
+# GitHub Settings > Secrets and variables > Actions
+BLACKBOX_API_KEY=your_blackbox_api_key_here
+# GITHUB_TOKEN is provided automatically by GitHub Actions
+```
+
+### 3. Configuration (Optional)
+
+Create `.pr-review-bot.json` in your repository root:
 
 ```json
 {
   "enabled": true,
   "auto_comment": true,
-  "severity_threshold": "medium",
-  "ignore_patterns": [
-    "*.md",
-    "*.txt",
-    "package-lock.json"
-  ],
+  "severity_threshold": "low",
+  "ignore_patterns": ["*.md", "*.txt", "package-lock.json", "yarn.lock"],
   "features": {
     "bug_detection": true,
     "security_scan": true,
     "doc_linking": true,
     "summarization": true
   },
-  "custom_rules": []
+  "max_comments": 50
 }
 ```
 
-### 3. Usage
+## 🎯 How It Works
 
-Once set up, the bot automatically:
-- ✅ Triggers on PR open/update events
-- ✅ Analyzes all changed files
-- ✅ Posts review comments
-- ✅ Generates PR summary
+### 1. Trigger
+The bot activates on:
+- New pull requests
+- PR updates (synchronize)
+- PR reopening
 
-## 📋 How It Works
+### 2. Analysis Process
+1. **Diff Analysis**: Parses git diffs to identify changed lines and code sections
+2. **Blackbox AI Review**: Sends code with diff context for intelligent analysis
+3. **Local Analyzers**: Pattern-based security and bug detection
+4. **Documentation Linking**: Finds relevant docs for issues
 
-1. **PR Event Trigger** - GitHub Actions detects PR creation/update
-2. **Fetch Changes** - Retrieves diff and changed files
-3. **Blackbox Analysis** - Sends code to Blackbox API for AI-powered review
-4. **Multi-Layer Analysis**:
-   - Bug pattern detection
-   - Security vulnerability scanning
-   - Code quality assessment
-   - Documentation suggestions
-5. **Post Comments** - Creates inline comments and summary
-6. **Update Status** - Reports analysis completion
+### 3. Results
+- **Inline Comments**: Posted on specific lines with issues
+- **Summary Comment**: Comprehensive overview with:
+  - Code quality grade
+  - Change statistics (lines added/removed)
+  - Issue breakdown by severity
+  - Files with significant changes
+  - Priority recommendations
 
-## 🔧 Advanced Configuration
+## 📋 Sample Review Output
 
-### Custom Rules
+### Summary Comment Example:
 
-Add custom detection rules in `config/rules.json`:
+```markdown
+## 🤖 Blackbox AI Code Review Summary
 
-```json
-{
-  "bug_patterns": [
-    {
-      "pattern": "eval\\(",
-      "message": "Avoid using eval() - security risk",
-      "severity": "high"
-    }
-  ],
-  "security_patterns": [
-    {
-      "pattern": "password\\s*=\\s*['\"]",
-      "message": "Hardcoded password detected",
-      "severity": "critical"
-    }
-  ]
+**Status:** ⚡ Minor issues found - consider addressing
+**Code Quality:** B grade
+
+### 📊 Changes Overview
+- **Files changed:** 5
+- **Lines added:** +127
+- **Lines removed:** -43
+- **Change complexity:** medium
+
+**Files with significant changes:**
+- `src/main.py` (+89/-12)
+- `src/analyzers/security.py` (+38/-31)
+
+### 🔍 Review Results
+- **Total issues found:** 8
+- **Files with issues:** 3
+
+**Issues by severity:**
+- ⚠️ High: 1
+- ⚡ Medium: 3
+- ℹ️ Low: 4
+
+### ⚠️ Priority Issues
+1. ⚠️ **src/main.py:45** 🔄 - Potential SQL injection vulnerability
+2. ⚡ **src/utils.py:123** - Unused variable detected
+3. ℹ️ **src/config.py:67** 🔄 - Consider using environment variables
+
+### 💡 Code Quality Insights
+**Main areas for improvement:**
+- Input validation and sanitization
+- Error handling consistency
+- Code documentation coverage
+
+### 📋 Recommendations
+⚠️ **High Priority:** Review and fix high-severity issues
+🔍 **Review:** Check inline comments for detailed feedback and suggestions
+
+---
+*💻 Detailed feedback available in inline comments*  
+*🔄 Issues marked with 🔄 are in changed code sections*  
+*🤖 Generated by Blackbox AI PR Review Bot*
+```
+
+### Inline Comment Example:
+
+```markdown
+🔒 **Security** 🚨 *Critical Severity*
+
+SQL query constructed with user input without proper sanitization
+
+**Code:**
+```python
+query = f"SELECT * FROM users WHERE id = {user_id}"
+```
+
+**💡 Suggestion:**
+Use parameterized queries to prevent SQL injection:
+```python
+query = "SELECT * FROM users WHERE id = %s"
+cursor.execute(query, (user_id,))
+```
+
+**🔗 Reference:** [CWE-89](https://cwe.mitre.org/data/definitions/89.html)
+
+---
+*🤖 Generated by Blackbox AI PR Review Bot*
+```
+
+## 🔧 Implementation Details
+
+### Key Components
+
+1. **main.py**: Orchestrates the entire review process
+2. **diff_parser.py**: Parses git diffs and extracts change information
+3. **comment_formatter.py**: Formats review comments with diff context
+4. **github_client.py**: Handles GitHub API interactions
+5. **blackbox_client.py**: Interfaces with Blackbox AI API
+6. **analyzers/**: Local analysis modules (security, bugs, etc.)
+
+### Enhanced Features
+
+#### Diff-Aware Analysis
+```python
+# Example of diff information passed to analyzers
+diff_info = {
+    "changed_lines": [{"line": 45, "type": "addition"}],
+    "additions": 15,
+    "deletions": 3,
+    "snippets": [{"start_line": 40, "content": "..."}],
+    "complexity": "medium",
+    "is_significant": True
 }
 ```
 
-### Environment Variables
+#### Smart Issue Prioritization
+- Issues in changed code marked with 🔄
+- Severity-based sorting (critical → info)
+- Change complexity affects recommendations
 
-- `BLACKBOX_API_KEY` - Your Blackbox API key (required)
-- `GITHUB_TOKEN` - GitHub token for API access (auto-provided)
-- `MIN_SEVERITY` - Minimum severity to report (info/low/medium/high/critical)
-- `MAX_COMMENTS` - Maximum comments per PR (default: 50)
+## 🛠️ Development
 
-## 🏗️ Architecture
+### Local Testing
 
-```
-┌─────────────────┐
-│   GitHub PR     │
-│   Event         │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ GitHub Actions  │
-│ Workflow        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  PR Review Bot  │
-│  (Python)       │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌──────────┐
-│Blackbox│ │ GitHub   │
-│  API   │ │   API    │
-└────────┘ └──────────┘
-```
-
-## 📊 Example Output
-
-### Inline Comment Example
-```
-🐛 Bug Detected (Medium Severity)
-
-Potential null pointer exception. The variable `user` may be null here.
-
-Suggestion: Add null check before accessing properties:
-if user is not None:
-    print(user.name)
-
-📚 Related Documentation: [Python None Handling](https://docs.python.org/3/library/stdtypes.html#the-null-object)
-```
-
-### PR Summary Example
-```
-## 🤖 Blackbox PR Review Summary
-
-**Overall Assessment**: ⚠️ Needs Attention
-
-### 📊 Statistics
-- Files Changed: 5
-- Lines Added: 120
-- Lines Removed: 45
-- Issues Found: 3
-
-### 🔍 Key Findings
-- 🐛 1 potential bug detected
-- 🔒 1 security concern
-- ℹ️ 1 code quality suggestion
-
-### 📝 Summary
-This PR adds user authentication functionality. The implementation is mostly solid, but there are a few concerns that should be addressed before merging.
-
-### ⚠️ Critical Issues
-1. Hardcoded API key in `auth.py:23`
-
-### 💡 Recommendations
-- Add input validation for user credentials
-- Consider using environment variables for secrets
-- Add unit tests for authentication flow
-```
-
-## 🧪 Testing
-
-Run tests locally:
 ```bash
+# Install dependencies
 pip install -r requirements.txt
-pytest tests/
+
+# Set environment variables
+export GITHUB_TOKEN="your_token"
+export BLACKBOX_API_KEY="your_key"
+export PR_NUMBER="123"
+export REPO_NAME="owner/repo"
+
+# Run locally
+python src/main.py
+```
+
+### Testing Individual Components
+
+```bash
+# Test diff parser
+python -m pytest tests/test_diff_parser.py
+
+# Test analyzers
+python -m pytest tests/test_analyzers.py
+
+# Test comment formatting  
+python -m pytest tests/test_comment_formatter.py
+```
+
+## 📈 Performance
+
+### Metrics
+- **Analysis Speed**: ~30-60 seconds per PR
+- **API Limits**: Respects GitHub rate limits
+- **Comment Limits**: Max 50 comments per PR (configurable)
+
+### Optimization Tips
+- Adjust `severity_threshold` to reduce noise
+- Use `ignore_patterns` for non-critical files
+- Set `max_comments` based on your workflow
+
+## 🔐 Security
+
+### Best Practices
+- Store API keys as GitHub Secrets
+- Use minimal GitHub token permissions
+- Review bot suggestions before merging
+- Regularly update dependencies
+
+### Required Permissions
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 ```
 
 ## 🤝 Contributing
 
-Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
+3. Add tests for new functionality
+4. Update documentation
+5. Submit a pull request
 
 ## 📄 License
 
 MIT License - see LICENSE file for details
 
-## 🔗 Links
+## 🆘 Troubleshooting
 
-- [Blackbox AI](https://www.blackbox.ai/)
+### Common Issues
+
+#### Bot Not Triggering
+- Check webhook configuration
+- Verify required secrets are set
+- Review workflow permissions
+
+#### API Rate Limits
+- Reduce comment frequency
+- Implement retry logic
+- Use GitHub Apps for higher limits
+
+#### Poor Review Quality
+- Adjust severity thresholds
+- Update ignore patterns
+- Fine-tune analyzer configurations
+
+### Debug Mode
+Enable debug logging by setting:
+```yaml
+env:
+  DEBUG: "true"
+```
+
+## 🔗 Related Links
+
+- [Blackbox AI API Documentation](https://www.blackbox.ai/)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Issue Tracker](https://github.com/yourusername/pr-review-bot/issues)
-
-## 💬 Support
-
-For issues or questions:
-- Open an issue on GitHub
-- Check existing documentation
-- Review example configurations
+- [GitHub REST API](https://docs.github.com/en/rest)
 
 ---
 
-Made with ❤️ using Blackbox AI
+**Made with ❤️ by the Blackbox AI community**

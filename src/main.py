@@ -82,41 +82,56 @@ class PRReviewBot:
         return False
 
     def analyze_code_with_blackbox(
-        self, code: str, filename: str, context: str = ""
+        self, code: str, filename: str, context: str = "", diff_info: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Analyze code using Blackbox API with fallback to local analysis."""
         try:
-            prompt = f"""Analyze this code for potential issues, bugs, and improvements.
+            # Include diff information in the prompt
+            diff_context = ""
+            if diff_info:
+                diff_context = f"\n\nDiff Summary:\n- Additions: {diff_info.get('additions', 0)} lines\n- Deletions: {diff_info.get('deletions', 0)} lines\n- Changed lines: {diff_info.get('changed_lines', [])}"
+                
+                # Include specific changed code snippets
+                if diff_info.get('snippets'):
+                    diff_context += "\n\nChanged Code Sections:\n"
+                    for snippet in diff_info['snippets'][:3]:  # Limit to first 3 snippets
+                        diff_context += f"Lines {snippet.get('start_line', '?')}-{snippet.get('start_line', 0) + len(snippet.get('lines', []))}:\n```\n{snippet.get('content', '')}\n```\n"
+
+            prompt = f"""Analyze this code for potential issues, bugs, and improvements with focus on the recent changes.
 
 File: {filename}
-Context: {context}
+Context: {context}{diff_context}
 
-Code:
+Full Code:
 ```
 {code}
 ```
 
-Please provide:
-1. Potential bugs or logic errors
-2. Security vulnerabilities
-3. Code quality issues
-4. Performance concerns
-5. Best practice violations
-6. Suggestions for improvement
+Please provide a comprehensive code review focusing on:
+1. Issues in the changed areas (highest priority)
+2. Potential bugs or logic errors
+3. Security vulnerabilities
+4. Code quality and maintainability issues
+5. Performance concerns
+6. Best practice violations
+7. Suggestions for improvement
 
 Format your response as JSON with this structure:
 {{
     "issues": [
         {{
-            "type": "bug|security|quality|performance",
+            "type": "bug|security|quality|performance|style",
             "severity": "critical|high|medium|low|info",
             "line": <line_number>,
             "message": "Description of the issue",
             "suggestion": "How to fix it",
-            "code_snippet": "Suggested code fix"
+            "code_snippet": "Suggested code fix",
+            "diff_related": true/false
         }}
     ],
-    "summary": "Overall assessment"
+    "summary": "Overall code review assessment focusing on code quality and changes",
+    "code_quality_score": "A|B|C|D|F",
+    "main_concerns": ["list", "of", "main", "concerns"]
 }}
 """
 
@@ -129,11 +144,11 @@ Format your response as JSON with this structure:
                 logger.warning(
                     "Blackbox API returned invalid response, using local analysis only"
                 )
-                return {"issues": [], "summary": "Using local pattern-based analysis"}
+                return {"issues": [], "summary": "Using local pattern-based analysis", "code_quality_score": "C", "main_concerns": []}
 
         except Exception as e:
             logger.error(f"Error analyzing code with Blackbox: {e}")
-            return {"issues": [], "summary": "Using local pattern-based analysis"}
+            return {"issues": [], "summary": "Using local pattern-based analysis", "code_quality_score": "C", "main_concerns": []}
 
     def _parse_blackbox_response(self, response: str) -> Dict[str, Any]:
         """Parse Blackbox API response."""
@@ -203,16 +218,29 @@ Format your response as JSON with this structure:
                     if not content:
                         continue
 
-                    # Parse diff to get changed lines
-                    changed_lines = (
-                        self.diff_parser.parse_patch(file.patch) if file.patch else []
-                    )
+                    # Parse diff to get comprehensive diff information
+                    diff_info = {}
+                    if file.patch:
+                        changed_lines = self.diff_parser.parse_patch(file.patch)
+                        diff_stats = self.diff_parser.get_diff_stats(file.patch)
+                        diff_snippets = self.diff_parser.extract_code_snippets(file.patch)
+                        
+                        diff_info = {
+                            "changed_lines": changed_lines,
+                            "additions": diff_stats["additions"],
+                            "deletions": diff_stats["deletions"],
+                            "changes": diff_stats["changes"],
+                            "snippets": diff_snippets,
+                            "complexity": self.diff_parser.get_change_complexity(file.patch),
+                            "is_significant": self.diff_parser.is_significant_change(file.patch)
+                        }
 
-                    # Run Blackbox analysis
+                    # Run Blackbox analysis with diff information
                     blackbox_result = self.analyze_code_with_blackbox(
                         content,
                         file.filename,
                         context=f"PR: {pr.title}\nChanges: {file.additions} additions, {file.deletions} deletions",
+                        diff_info=diff_info
                     )
 
                     # Run local analyzers
@@ -247,11 +275,14 @@ Format your response as JSON with this structure:
                             "filename": file.filename,
                             "issues": filtered_issues,
                             "summary": blackbox_result.get("summary", ""),
+                            "code_quality_score": blackbox_result.get("code_quality_score", "C"),
+                            "main_concerns": blackbox_result.get("main_concerns", []),
                             "stats": {
                                 "additions": file.additions,
                                 "deletions": file.deletions,
                                 "changes": file.changes,
                             },
+                            "diff_info": diff_info,
                         }
                     )
 
@@ -265,13 +296,31 @@ Format your response as JSON with this structure:
             if self.config.get("auto_comment", True) and all_issues:
                 self._post_review_comments(file_analyses)
 
-            # Generate and post summary
+            # Generate and post summary with diff information
             if self.config["features"].get("summarization", True):
+                # Prepare comprehensive diff summary
+                diff_summary = {
+                    "total_additions": sum(fa["stats"]["additions"] for fa in file_analyses),
+                    "total_deletions": sum(fa["stats"]["deletions"] for fa in file_analyses),
+                    "significant_files": [
+                        {
+                            "filename": fa["filename"],
+                            "additions": fa["stats"]["additions"],
+                            "deletions": fa["stats"]["deletions"],
+                            "complexity": fa.get("diff_info", {}).get("complexity", "medium")
+                        }
+                        for fa in file_analyses
+                        if fa.get("diff_info", {}).get("is_significant", False)
+                    ],
+                    "overall_complexity": self._calculate_overall_complexity(file_analyses)
+                }
+                
                 summary = self.summarizer.generate_summary(
                     pr_title=pr.title,
                     pr_description=pr.body or "",
                     file_analyses=file_analyses,
                     total_files=len(files),
+                    diff_summary=diff_summary
                 )
                 self._post_summary_comment(summary)
 
@@ -283,6 +332,33 @@ Format your response as JSON with this structure:
         except Exception as e:
             logger.error(f"Error processing PR: {e}", exc_info=True)
             sys.exit(1)
+
+    def _calculate_overall_complexity(self, file_analyses: List[Dict[str, Any]]) -> str:
+        """Calculate overall complexity of the PR changes."""
+        if not file_analyses:
+            return "low"
+        
+        complexity_scores = {"low": 1, "medium": 2, "high": 3}
+        total_score = 0
+        count = 0
+        
+        for fa in file_analyses:
+            diff_info = fa.get("diff_info", {})
+            complexity = diff_info.get("complexity", "medium")
+            if complexity in complexity_scores:
+                total_score += complexity_scores[complexity]
+                count += 1
+        
+        if count == 0:
+            return "medium"
+        
+        avg_score = total_score / count
+        if avg_score <= 1.3:
+            return "low"
+        elif avg_score <= 2.3:
+            return "medium"
+        else:
+            return "high"
 
     def _post_review_comments(self, file_analyses: List[Dict[str, Any]]):
         """Post inline review comments on the PR."""

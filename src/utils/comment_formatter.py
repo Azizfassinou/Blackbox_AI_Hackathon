@@ -129,39 +129,65 @@ class CommentFormatter:
         total_issues: int,
         severity_breakdown: Dict[str, int],
         top_issues: List[Dict[str, Any]],
+        diff_summary: Dict[str, Any] = None,
+        code_quality_overview: Dict[str, Any] = None,
     ) -> str:
         """
-        Format a summary comment for the entire PR.
+        Format a summary comment for the entire PR with diff information.
 
         Args:
             total_files: Total number of files reviewed
             total_issues: Total number of issues found
             severity_breakdown: Dictionary of severity counts
             top_issues: List of most important issues
+            diff_summary: Summary of changes made in the PR
+            code_quality_overview: Overall code quality assessment
 
         Returns:
             Formatted summary comment
         """
-        comment = "## 🤖 Blackbox AI PR Review Summary\n\n"
+        comment = "## 🤖 Blackbox AI Code Review Summary\n\n"
 
-        # Overall status
+        # Overall status with code quality
         if severity_breakdown.get("critical", 0) > 0:
-            comment += "**Status:** 🚨 Critical issues found - review required\n\n"
+            comment += "**Status:** 🚨 Critical issues found - review required before merge\n"
         elif severity_breakdown.get("high", 0) > 0:
-            comment += "**Status:** ⚠️ High priority issues found\n\n"
+            comment += "**Status:** ⚠️ High priority issues found - please address\n"
         elif total_issues > 0:
-            comment += "**Status:** ⚡ Minor issues found\n\n"
+            comment += "**Status:** ⚡ Minor issues found - consider addressing\n"
         else:
-            comment += "**Status:** ✅ No issues found\n\n"
+            comment += "**Status:** ✅ No critical issues found\n"
 
-        # Statistics
-        comment += "### 📊 Review Statistics\n\n"
-        comment += f"- Files reviewed: {total_files}\n"
-        comment += f"- Total issues: {total_issues}\n\n"
+        # Add code quality score if available
+        if code_quality_overview and code_quality_overview.get("average_score"):
+            score = code_quality_overview["average_score"]
+            comment += f"**Code Quality:** {score} grade\n\n"
+        else:
+            comment += "\n"
+
+        # Diff Summary
+        if diff_summary:
+            comment += "### 📊 Changes Overview\n\n"
+            comment += f"- **Files changed:** {total_files}\n"
+            comment += f"- **Lines added:** +{diff_summary.get('total_additions', 0)}\n"
+            comment += f"- **Lines removed:** -{diff_summary.get('total_deletions', 0)}\n"
+            comment += f"- **Change complexity:** {diff_summary.get('overall_complexity', 'Unknown')}\n\n"
+            
+            # Significant changes
+            if diff_summary.get('significant_files'):
+                comment += "**Files with significant changes:**\n"
+                for file_info in diff_summary['significant_files'][:5]:
+                    comment += f"- `{file_info['filename']}` (+{file_info.get('additions', 0)}/-{file_info.get('deletions', 0)})\n"
+                comment += "\n"
+
+        # Issue statistics
+        comment += "### 🔍 Review Results\n\n"
+        comment += f"- **Total issues found:** {total_issues}\n"
+        comment += f"- **Files with issues:** {len([f for f in severity_breakdown.keys() if severity_breakdown[f] > 0])}\n\n"
 
         # Severity breakdown
         if total_issues > 0:
-            comment += "**By Severity:**\n"
+            comment += "**Issues by severity:**\n"
             for severity in ["critical", "high", "medium", "low", "info"]:
                 count = severity_breakdown.get(severity, 0)
                 if count > 0:
@@ -169,22 +195,50 @@ class CommentFormatter:
                     comment += f"- {emoji} {severity.title()}: {count}\n"
             comment += "\n"
 
-        # Top issues
-        if top_issues:
-            comment += "### ⚠️ Top Issues to Address\n\n"
+            # Top issues with diff context
+            comment += "### ⚠️ Priority Issues\n\n"
             for i, issue in enumerate(top_issues[:5], 1):
                 severity = issue.get("severity", "info")
                 emoji = self.severity_emojis.get(severity, "ℹ️")
                 message = issue.get("message", "Issue detected")
                 file = issue.get("file", "unknown")
                 line = issue.get("line", "N/A")
-
-                comment += f"{i}. {emoji} **{file}:{line}** - {message}\n"
+                
+                # Mark if issue is related to diff changes
+                diff_marker = " 🔄" if issue.get("diff_related", False) else ""
+                
+                comment += f"{i}. {emoji} **{file}:{line}**{diff_marker} - {message}\n"
+            
+            if len(top_issues) > 5:
+                comment += f"*... and {len(top_issues) - 5} more issues*\n"
             comment += "\n"
 
+        # Code quality insights
+        if code_quality_overview and code_quality_overview.get("main_concerns"):
+            comment += "### 💡 Code Quality Insights\n\n"
+            comment += "**Main areas for improvement:**\n"
+            for concern in code_quality_overview["main_concerns"][:5]:
+                comment += f"- {concern}\n"
+            comment += "\n"
+
+        # Recommendations
+        comment += "### 📋 Recommendations\n\n"
+        
+        if severity_breakdown.get("critical", 0) > 0:
+            comment += "🚨 **Critical:** Address critical security and functionality issues before merging\n"
+        
+        if severity_breakdown.get("high", 0) > 0:
+            comment += "⚠️ **High Priority:** Review and fix high-severity issues\n"
+            
+        if total_issues > 0:
+            comment += "🔍 **Review:** Check inline comments for detailed feedback and suggestions\n"
+        else:
+            comment += "✅ **Good to go:** Code looks clean and follows best practices\n"
+
         # Footer
-        comment += "---\n"
-        comment += "*💡 Check inline comments for detailed suggestions and fixes*\n\n"
+        comment += "\n---\n"
+        comment += "*💻 Detailed feedback available in inline comments*  \n"
+        comment += "*🔄 Issues marked with 🔄 are in changed code sections*  \n"
         comment += "*🤖 Generated by Blackbox AI PR Review Bot*\n"
 
         return comment

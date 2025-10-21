@@ -21,15 +21,17 @@ class Summarizer:
         pr_description: str,
         file_analyses: List[Dict[str, Any]],
         total_files: int,
+        diff_summary: Dict[str, Any] = None,
     ) -> str:
         """
-        Generate a comprehensive PR summary.
+        Generate a comprehensive PR summary with diff information.
 
         Args:
             pr_title: PR title
             pr_description: PR description
             file_analyses: List of file analysis results
             total_files: Total number of files changed
+            diff_summary: Summary of diff information
 
         Returns:
             Formatted summary as markdown
@@ -37,11 +39,18 @@ class Summarizer:
         # Calculate statistics
         total_issues = sum(len(fa["issues"]) for fa in file_analyses)
 
-        # Group issues by severity
+        # Group issues by severity and type
         severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-        type_counts = {"bug": 0, "security": 0, "quality": 0, "performance": 0}
+        type_counts = {"bug": 0, "security": 0, "quality": 0, "performance": 0, "style": 0}
+        code_quality_scores = []
 
         for file_analysis in file_analyses:
+            # Extract code quality score if available
+            if "code_quality_score" in file_analysis:
+                score = file_analysis["code_quality_score"]
+                if score in ["A", "B", "C", "D", "F"]:
+                    code_quality_scores.append(score)
+
             for issue in file_analysis["issues"]:
                 severity = issue.get("severity", "info")
                 issue_type = issue.get("type", "quality")
@@ -51,24 +60,72 @@ class Summarizer:
                 if issue_type in type_counts:
                     type_counts[issue_type] += 1
 
-        # Calculate total lines changed
-        total_additions = sum(fa["stats"]["additions"] for fa in file_analyses)
-        total_deletions = sum(fa["stats"]["deletions"] for fa in file_analyses)
+        # Prepare diff summary information
+        if not diff_summary:
+            diff_summary = {
+                "total_additions": sum(fa["stats"]["additions"] for fa in file_analyses),
+                "total_deletions": sum(fa["stats"]["deletions"] for fa in file_analyses),
+                "overall_complexity": "medium",
+                "significant_files": [
+                    {
+                        "filename": fa["filename"],
+                        "additions": fa["stats"]["additions"],
+                        "deletions": fa["stats"]["deletions"]
+                    }
+                    for fa in file_analyses
+                    if fa["stats"]["additions"] + fa["stats"]["deletions"] > 10
+                ]
+            }
 
-        # Determine overall assessment
-        assessment = self._determine_assessment(severity_counts)
+        # Prepare code quality overview
+        code_quality_overview = {}
+        if code_quality_scores:
+            # Calculate average score (A=4, B=3, C=2, D=1, F=0)
+            score_values = {"A": 4, "B": 3, "C": 2, "D": 1, "F": 0}
+            avg_score_value = sum(score_values.get(s, 2) for s in code_quality_scores) / len(code_quality_scores)
+            
+            for score, value in score_values.items():
+                if abs(avg_score_value - value) < 0.5:
+                    code_quality_overview["average_score"] = score
+                    break
+            else:
+                code_quality_overview["average_score"] = "C"
 
-        # Build summary
-        summary = self._build_summary_header(pr_title, assessment)
-        summary += self._build_statistics_section(
-            total_files, total_additions, total_deletions, total_issues
+        # Extract main concerns from file analyses
+        main_concerns = []
+        for fa in file_analyses:
+            if "main_concerns" in fa:
+                main_concerns.extend(fa["main_concerns"])
+        
+        # Remove duplicates and limit
+        main_concerns = list(dict.fromkeys(main_concerns))[:5]
+        if main_concerns:
+            code_quality_overview["main_concerns"] = main_concerns
+
+        # Get top issues with file context
+        top_issues = []
+        for file_analysis in file_analyses:
+            for issue in file_analysis["issues"]:
+                issue_with_file = issue.copy()
+                issue_with_file["file"] = file_analysis["filename"]
+                top_issues.append(issue_with_file)
+
+        # Sort by severity (critical first)
+        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+        top_issues.sort(key=lambda x: severity_order.get(x.get("severity", "info"), 4))
+
+        # Use the enhanced comment formatter
+        from utils.comment_formatter import CommentFormatter
+        formatter = CommentFormatter()
+        
+        summary = formatter.format_summary_comment(
+            total_files=total_files,
+            total_issues=total_issues,
+            severity_breakdown=severity_counts,
+            top_issues=top_issues[:10],  # Top 10 issues
+            diff_summary=diff_summary,
+            code_quality_overview=code_quality_overview
         )
-        summary += self._build_findings_section(severity_counts, type_counts)
-        summary += self._build_description_section(pr_description)
-        summary += self._build_critical_issues_section(file_analyses)
-        summary += self._build_recommendations_section(file_analyses, severity_counts)
-        summary += self._build_file_breakdown_section(file_analyses)
-        summary += self._build_footer()
 
         return summary
 
