@@ -1,0 +1,17 @@
+{
+  "name": "pr-bot-hackathon",
+  "version": "1.0.0",
+  "main": "api/analyze-pr.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "vercel build",
+    "start": "vercel start"
+  },
+  "dependencies": {
+    "@vercel/node": "^2.0.0",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "vercel": "^28.0.0"
+  }
+}

@@ -1,0 +1,25 @@
+name: PR Analyzer
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  analyze-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Analyze PR
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BLACKBOX_API_KEY: ${{ secrets.BLACKBOX_API_KEY }}
+        run: python analyze_pr.py
