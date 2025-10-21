@@ -12,57 +12,49 @@ logger = logging.getLogger(__name__)
 
 class BlackboxClient:
     """Client for interacting with Blackbox API."""
-    
+
     def __init__(self, api_key: str):
         """
         Initialize Blackbox client.
-        
+
         Args:
             api_key: Blackbox API key
         """
         self.api_key = api_key
         self.base_url = "https://www.blackbox.ai/api/chat"
         self.session = requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json'
-        })
-        
+        self.session.headers.update({"Content-Type": "application/json"})
+
         # Rate limiting
         self.last_request_time = 0
         self.min_request_interval = 0.5  # seconds between requests
-    
+
     def _rate_limit(self):
         """Implement rate limiting."""
         current_time = time.time()
         time_since_last_request = current_time - self.last_request_time
-        
+
         if time_since_last_request < self.min_request_interval:
             sleep_time = self.min_request_interval - time_since_last_request
             time.sleep(sleep_time)
-        
+
         self.last_request_time = time.time()
-    
+
     def analyze_code(self, prompt: str, max_retries: int = 3) -> str:
         """
         Analyze code using Blackbox API.
-        
+
         Args:
             prompt: The analysis prompt containing code and instructions
             max_retries: Maximum number of retry attempts
-            
+
         Returns:
             Analysis result as string
         """
         self._rate_limit()
-        
+
         payload = {
-            "messages": [
-                {
-                    "id": "user-msg",
-                    "content": prompt,
-                    "role": "user"
-                }
-            ],
+            "messages": [{"id": "user-msg", "content": prompt, "role": "user"}],
             "id": "chat-id",
             "previewToken": self.api_key,
             "userId": None,
@@ -82,59 +74,61 @@ class BlackboxClient:
             "visitFromDelta": False,
             "mobileClient": False,
             "userSelectedModel": None,
-            "validated": self.api_key
+            "validated": self.api_key,
         }
-        
+
         for attempt in range(max_retries):
             try:
-                logger.info(f"Sending request to Blackbox API (attempt {attempt + 1}/{max_retries})")
-                
-                response = self.session.post(
-                    self.base_url,
-                    json=payload,
-                    timeout=60
+                logger.info(
+                    f"Sending request to Blackbox API (attempt {attempt + 1}/{max_retries})"
                 )
-                
+
+                response = self.session.post(self.base_url, json=payload, timeout=60)
+
                 if response.status_code == 200:
                     result = response.text
-                    logger.info(f"Received response from Blackbox API ({len(result)} chars)")
+                    logger.info(
+                        f"Received response from Blackbox API ({len(result)} chars)"
+                    )
                     return result
                 elif response.status_code == 429:
                     # Rate limited
-                    retry_after = int(response.headers.get('Retry-After', 5))
+                    retry_after = int(response.headers.get("Retry-After", 5))
                     logger.warning(f"Rate limited. Waiting {retry_after} seconds...")
                     time.sleep(retry_after)
                     continue
                 else:
-                    logger.error(f"API request failed with status {response.status_code}: {response.text}")
+                    logger.error(
+                        f"API request failed with status {response.status_code}: {response.text}"
+                    )
                     if attempt < max_retries - 1:
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                        time.sleep(2**attempt)  # Exponential backoff
                         continue
-                    
+
             except requests.exceptions.Timeout:
                 logger.error(f"Request timeout (attempt {attempt + 1}/{max_retries})")
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
-                    
+
             except Exception as e:
                 logger.error(f"Error calling Blackbox API: {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
-        
+
         # If all retries failed, return empty response
         logger.error("All retry attempts failed")
         return ""
-    
+
     def analyze_diff(self, diff: str, context: str = "") -> str:
         """
         Analyze a code diff.
-        
+
         Args:
             diff: Git diff string
             context: Additional context about the changes
-            
+
         Returns:
             Analysis result
         """
@@ -157,15 +151,15 @@ Focus on:
 Provide specific line numbers and actionable suggestions."""
 
         return self.analyze_code(prompt)
-    
+
     def suggest_improvements(self, code: str, language: str) -> str:
         """
         Suggest improvements for code.
-        
+
         Args:
             code: Source code
             language: Programming language
-            
+
         Returns:
             Improvement suggestions
         """
@@ -184,15 +178,15 @@ Provide:
 Be specific and provide code examples."""
 
         return self.analyze_code(prompt)
-    
+
     def explain_code(self, code: str, language: str) -> str:
         """
         Generate explanation for code.
-        
+
         Args:
             code: Source code
             language: Programming language
-            
+
         Returns:
             Code explanation
         """
@@ -209,15 +203,15 @@ Provide:
 4. Potential concerns"""
 
         return self.analyze_code(prompt)
-    
+
     def check_security(self, code: str, language: str) -> str:
         """
         Perform security analysis on code.
-        
+
         Args:
             code: Source code
             language: Programming language
-            
+
         Returns:
             Security analysis
         """
